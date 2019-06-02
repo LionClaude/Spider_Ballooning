@@ -65,7 +65,6 @@ void Bead::getDistances(){
     r+=pow((q[i]-*qleft[i]),2);
   }
   r=sqrt(r);
-  //cout << r << "\n";
 };
 
 void Bead::getAngles(){
@@ -74,12 +73,8 @@ void Bead::getAngles(){
     theta=acos((*qright[2]-q[2])/(*r_right));
   } else{
     theta=0.0;
-  //theta=M_PI/2;
   }
-  //cout << theta << "\n";
-  //cout << *qright[2]-q[2] << " " << *r_right << "\n";
-  //phi=atan2((*qright[1]-q[1]),(*qright[0]-q[0]));
-  //phi=0.0;
+  phi=atan2((*qright[1]-q[1]),(*qright[0]-q[0]));
 };
 
 void Bead::getFel(){
@@ -106,8 +101,6 @@ void Bead::getScalarProd(){
       sp+=(*qleft[i]-q[i])*(*qright[i]-q[i]);
     }
   }
-
-  //cout << *sp_right << " " << (n+1)%N_beads << "\n";
 };
 
 void Bead::getFKP(){
@@ -116,7 +109,6 @@ void Bead::getFKP(){
   for (i=0; i<3; i++){
     F_KP[i]=0;
   }
-  //cout << r << "\n";
   for (i=0; i<3; i++){
     if (n>1){
       F_KP[i]=-J*((*qlleft[i]-*qleft[i])/(*r_left*r)-*sp_left*(q[i]-*qleft[i])/(*r_left*pow(r,3)));
@@ -128,10 +120,6 @@ void Bead::getFKP(){
       F_KP[i]-=J*((*qrright[i]-*qright[i])/(*r_right*(*r_fright))-*sp_right*(q[i]-*qright[i])/(pow(*r_right,3)*(*r_fright)));
     }
   }
-
-  //for (i=0; i<3; i++){
-    //cout << theta << " " << n << "\n";
-  //}
 };
 
 void Bead::getVel(){
@@ -214,9 +202,9 @@ void System::getValues(){
 
   for (i=0; i<N_beads; i++){
     p[i].k=1;
-    p[i].J=0.0;
+    p[i].J=0.1;
     p[i].s0=0.1;
-    p[i].b=0.0;
+    p[i].b=0.5;
 
     if (i!=0){
       p[i].m=0.0005;
@@ -224,7 +212,7 @@ void System::getValues(){
       p[i].m=0.01;
     }
 
-    p[i].g=0.0;
+    p[i].g=9.81;
     p[i].dt=0.0001;
     for (j=0; j<3; j++){
       p[i].vel_in[j]=0;
@@ -318,7 +306,7 @@ void System::evolve(){
     }
     computeKinEn();
     computePotEn();
-    outdata << j << " " << K_tot << " " << U_tot << " " << K_tot+U_tot << "\n";
+    outdata << j << " " << K_tot << " " << U_tot << " " << K_tot+U_tot << " " << p[5].r << "\n";
     if (flag==1){
       cout << j << "\n";
       break;
