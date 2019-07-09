@@ -4,7 +4,7 @@
 #include <cmath>
 #include <random>
 using namespace std;
-const int N_beads=21;
+const int N_beads=15;
 const int N_lines=3;
 
 
@@ -39,9 +39,12 @@ class Bead{
     double J;
     double s0;
     double b;
+    double w;
+    double thr;
     double m;
     double g;
     double dt;
+    double tfunc;
     void getDistances();
     void getAngles();
     void getFel();
@@ -49,6 +52,9 @@ class Bead{
     void getFKP();
     void getVel();
     void getWindVel();
+    double psi(double x);
+    double d_psi(double x);
+    double f(double t_in);
     void getDrag();
     void getWeight();
     void oneStepProp();
@@ -56,6 +62,7 @@ class Bead{
     int i;
     int n;
     int l;
+    int time;
     double *qlleft[3];
     double *qleft[3];
     double *qright[3];
@@ -124,9 +131,34 @@ void Bead::getVel(){
 };
 
 void Bead::getWindVel(){
-  wind_vel[0]=1.0;
+  tfunc=time*dt;
+  wind_vel[0]=w*q[2]-f(tfunc)*psi(q[0])*q[2];
   wind_vel[1]=0.0;
-  wind_vel[2]=0.0;
+  wind_vel[2]=f(tfunc)*d_psi(q[0])*pow(q[2],2)/2;
+};
+
+double Bead::f(double t_in){
+  return pow(sin(t_in),2);
+};
+
+double Bead::d_psi(double x){
+  if ((x<thr) && (x>-thr)){
+    return 1;
+  } else{
+    return 0;
+  }
+};
+
+double Bead::psi(double x){
+  if ((x<thr) && (x>-thr)){
+    return x+thr;
+  } else{
+    if (x<-thr){
+      return 0;
+    } else{
+      return 2*thr;
+    }
+  }
 };
 
 void Bead::getWeight(){
@@ -139,9 +171,15 @@ void Bead::getWeight(){
   }
 };
 
+void Bead::getDrag(){
+  for (i=0; i<3; i++){
+    F_drag[i]=-b*(vel[i]-wind_vel[i]);
+  }
+};
+
 void Bead::firstStepProp(){
   for (i=0; i<3; i++){
-    q[i]=q_old[i]+vel_in[i]*dt+(pow(dt,2)/(2*m))*(b*(wind_vel[i]-vel_in[i])+F_el[i]+F_KP[i]+F_weight[i]);
+    q[i]=q_old[i]+vel[i]*dt+(pow(dt,2)/(2*m))*(b*(wind_vel[i]-vel[i])+F_el[i]+F_KP[i]+F_weight[i]);
   }
 };
 
@@ -176,21 +214,22 @@ class System: public Bead{
     void initialize();
     void evolve();
     void printCoord();
+    void printForces();
 };
 
 void System::getValues(){
   N_springs=N_beads-1;
-  N_steps=150000;
+  N_steps=10;
   z0=2.0;
 
   for (i=0; i<N_lines; i++){
     for (j=0; j<N_beads; j++){
-      p[i][j].k=1;
+      p[i][j].k=0.5;
       p[i][j].J=0.1;
       p[i][j].s0=0.1;
-      p[i][j].b=0.5;
-      p[i][j].g=9.81;
-      p[i][j].dt=0.001;
+      p[i][j].dt=0.00001;
+      p[i][j].time=0;
+      p[i][j].w=1.0;
 
       if (j!=0){
         p[i][j].m=0.0005;
@@ -198,8 +237,12 @@ void System::getValues(){
         p[i][j].m=0.01;
       }
 
-      for (k=0; k<3; k++){
-        p[i][j].vel_in[k]=0;
+      if ((j==0)&&(i>0)){
+        p[i][0].g=0.0;
+        p[i][0].b=0.0;
+      } else{
+        p[i][j].b=0.1;
+        p[i][j].g=9.81;
       }
     }
   }
@@ -207,9 +250,11 @@ void System::getValues(){
 
 void System::initialize(){
   getValues();
-  std::default_random_engine generator;
-  std::normal_distribution<double> distribution(1.0, 0.5);
-  std::normal_distribution<double> distribution2(0.0, 0.5);
+
+  std::default_random_engine generator(1234);
+  std::normal_distribution<double> distribution(1.0, 0.1);
+  std::normal_distribution<double> distribution2(1.0, 0.1);
+
   for (i=0; i<N_lines; i++){
     for (j=0; j<N_beads; j++){
       if ((j==0) && (i>0)){
@@ -226,12 +271,12 @@ void System::initialize(){
       }
       for (k=0; k<3; k++){
         p[i][j].q[k]=p[i][j].q_old[k];
+        p[i][j].vel[k]=0;
       }
       p[i][j].n=j;                                //pass position of the bead
     }
     p[i][j].l=i;                                  //pass line of the bead
   }
-
 
   for (i=0; i<N_lines; i++){
     for (j=0; j<N_beads; j++){
@@ -277,11 +322,17 @@ void System::initialize(){
     for (j=0; j<N_beads; j++){
       if ((j==0) && (i>0)){
         for (k=0; k<3; k++){
-          p[i][j].q[k]=p[0][0].q[k];
+          p[i][0].q_old[k]=p[i-1][0].q[k];
         }
-      } else{
-        p[i][j].firstStepProp();
       }
+      p[i][j].firstStepProp();
+    }
+  }
+
+  for (i=0; i<N_lines-1; i++){
+    for (k=0; k<3; k++){
+      p[i][0].q_old[k]=p[N_lines-1][0].q_old[k];
+      p[i][0].q[k]=p[N_lines-1][0].q[k];
     }
   }
 };
@@ -290,10 +341,12 @@ void System::initialize(){
 void System::computeForces(){
   for (i=0; i<N_lines; i++){
     for (j=0; j<N_beads; j++){
+      p[i][j].time=t+1;
       p[i][j].getDistances();
       p[i][j].getScalarProd();
       p[i][j].getAngles();
       p[i][j].getWindVel();
+      p[i][j].getDrag();
       p[i][j].getWeight();
       p[i][j].getFKP();
       p[i][j].getFel();
@@ -301,9 +354,37 @@ void System::computeForces(){
   }
 }
 
+void System::printForces(){
+  double mod_KP;
+  double mod_el;
+  double mod_w;
+  double mod_drag;
+  ofstream outdata3;
+  //outdata3.open("ModForces.txt");
+  for (i=0; i<N_lines; i++){
+    for (j=0; j<N_beads; j++){
+      mod_KP=0;
+      mod_el=0;
+      mod_drag=0;
+      mod_w=p[i][j].F_weight[2];
+      for (k=0; k<3; k++){
+        mod_el+=pow(p[i][j].F_el[k],2);
+        mod_KP+=pow(p[i][j].F_KP[k],2);
+        mod_drag+=pow(p[i][j].F_drag[k],2);
+      }
+      cout << t << " " << sqrt(mod_el) << " " << sqrt(mod_KP) << " " << sqrt(mod_drag) << " " << mod_w << " ";
+      for (k=0; k<3; k++){
+        cout << p[i][j].q_new[k] << " ";
+      }
+      cout << "\n";
+    }
+  }
+  //outdata3.close();
+};
+
 void System::evolve(){
-  ofstream outdata;
-  outdata.open("en.txt");
+  ofstream outdata3;
+  outdata3.open("ModForces.txt");
   int flag=0;
   initialize();
 
@@ -313,38 +394,63 @@ void System::evolve(){
       for (j=0; j<N_beads; j++){
         if ((j==0) && (i>0)){
           for (k=0; k<3; k++){
-            p[i][j].q[k]=p[0][0].q[k];
+            p[i][0].q_old[k]=p[0][0].q_old[k];
+            p[i][0].q[k]=p[0][0].q[k];
           }
-        } else{
-          p[i][j].oneStepProp();
         }
+        p[i][j].oneStepProp();
         if (p[i][j].q[2]<0.0){
           flag=1;
         }
       }
     }
+
+    for (i=0; i<N_lines-1; i++){
+      for (k=0; k<3; k++){
+        p[i][0].q_old[k]=p[N_lines-1][0].q_old[k];
+        p[i][0].q[k]=p[N_lines-1][0].q[k];
+      }
+    }
+
+    //if (t%100000==0){
+      //cout << "banane\n";
+      printForces();
+    //}
     if (flag==1){
+      cout << t << "\n";
       break;
     }
+    for (i=0; i<N_lines; i++){
+      for (j=0; j<N_beads; j++){
+        p[i][j].getVel();
+        //cout << "dionudo\n";
+      }
+    }
   }
-  outdata.close();
+  outdata3.close();
 };
 
 void System::printCoord(){
   ofstream outdata;
-  outdata.open("coord.txt");
+  ofstream outdata2;
+  outdata.open("coord.dat");
+  outdata2.open("forces.txt");
   for (i=0; i<N_lines; i++){
     for (j=0; j<N_beads; j++){
       for (k=0; k<3; k++){
         outdata << p[i][j].q[k] << " ";
+        outdata2 << p[i][j].F_el[k] << " ";
         cout << p[i][j].q[k] << " ";
       }
       outdata << "\n";
+      outdata2 << "\n";
       cout << "\n";
     }
     cout << "\n";
+    outdata << "\n\n";
   }
   outdata.close();
+  outdata2.close();
 };
 
 int main(){
